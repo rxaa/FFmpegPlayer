@@ -2,17 +2,22 @@
 
 #include "stdafx.h"
 
+// set -vf 
 EXPORT_API int WINAPI ffplay_set_vf(const char * cmd);
+
+//set -af
 EXPORT_API int WINAPI ffplay_set_af(const char * cmd);
 
+//play file in 'hwndParent' window
+EXPORT_API int WINAPI ffplay_start(const char * name, HWND hwndParent);
 
-EXPORT_API int WINAPI ffplay_start(int argc, const char * name, HWND hwndParent);
-
+//stop and release all file
 EXPORT_API int WINAPI ffplay_stop();
 
 EXPORT_API int WINAPI ffplay_resize(int w, int h);
 
-EXPORT_API int WINAPI ffplay_set_stop_show(int w);
+//1.disable video render 0.enable
+EXPORT_API int WINAPI ffplay_set_stop_show(int val);
 
 EXPORT_API int WINAPI ffplay_step_to_next_frame();
 
@@ -23,8 +28,11 @@ EXPORT_API int WINAPI ffplay_get_state();
 
 EXPORT_API int WINAPI ffplay_toggle_pause();
 
+//millisecond
 EXPORT_API long long WINAPI ffplay_get_duration();
 
+//millisecond
 EXPORT_API long long WINAPI ffplay_get_position();
 
+//millisecond
 EXPORT_API int WINAPI ffplay_set_position(long long position);

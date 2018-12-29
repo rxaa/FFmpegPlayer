@@ -3945,7 +3945,7 @@ EXPORT_API int WINAPI ffplay_set_af(const char * cmd)
 }
 
 /* Called from the main */
-EXPORT_API int WINAPI ffplay_start(int argc, const char * name, HWND parent)
+EXPORT_API int WINAPI ffplay_start(const char * name, HWND parent)
 {
 
 	hwndParent = parent;
@@ -3995,9 +3995,9 @@ EXPORT_API int WINAPI ffplay_resize(int w, int h)
 	return 0;
 }
 
-EXPORT_API int WINAPI ffplay_set_stop_show(int w)
+EXPORT_API int WINAPI ffplay_set_stop_show(int val)
 {
-	stop_show = w;
+	stop_show = val;
 	return 0;
 }
 
