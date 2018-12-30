@@ -64,7 +64,8 @@ int main(int argc, char *argv[]) {
 		CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
 
 
-	ffplay_start(0, "D:/video test/[MMD]Satisfaction.mp4", hWnd);
+	ffplay_set_vf("vflip");
+	ffplay_start( "D:/video test/[MMD]Satisfaction.mp4", hWnd);
 
 
 	//ÏûÏ¢Ñ­»·

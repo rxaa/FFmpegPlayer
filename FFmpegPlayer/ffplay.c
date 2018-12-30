@@ -379,6 +379,8 @@ static int is_stoped = 0;
 
 static void(*on_complete)() = NULL;
 
+static void(*on_success)() = NULL;
+
 static const struct TextureFormatEntry {
 	enum AVPixelFormat format;
 	int texture_fmt;
@@ -1495,23 +1497,23 @@ static int get_master_sync_type(VideoState *is) {
 	}
 }
 
-static double get_master_clock2(VideoState *is)
-{
-	double val;
-
-	switch (get_master_sync_type(is)) {
-	case AV_SYNC_VIDEO_MASTER:
-		val = is->vidclk.pts;
-		break;
-	case AV_SYNC_AUDIO_MASTER:
-		val = is->audclk.pts;
-		break;
-	default:
-		val = get_clock(&is->extclk);
-		break;
-	}
-	return val;
-}
+//static double get_master_clock2(VideoState *is)
+//{
+//	double val;
+//
+//	switch (get_master_sync_type(is)) {
+//	case AV_SYNC_VIDEO_MASTER:
+//		val = is->vidclk.pts;
+//		break;
+//	case AV_SYNC_AUDIO_MASTER:
+//		val = is->audclk.pts;
+//		break;
+//	default:
+//		val = get_clock(&is->extclk);
+//		break;
+//	}
+//	return val;
+//}
 
 /* get the current master clock value */
 static double get_master_clock(VideoState *is)
@@ -2874,6 +2876,7 @@ static int read_thread(void *arg)
 		ret = AVERROR(ENOMEM);
 		goto fail;
 	}
+
 	ic->interrupt_callback.callback = decode_interrupt_cb;
 	ic->interrupt_callback.opaque = is;
 	if (!av_dict_get(format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE)) {
@@ -2950,12 +2953,17 @@ static int read_thread(void *arg)
 	if (show_status)
 		av_dump_format(ic, 0, is->filename, 0);
 
+
+
 	for (i = 0; i < ic->nb_streams; i++) {
 		AVStream *st = ic->streams[i];
 
+
 		enum AVMediaType type = st->codecpar->codec_type;
 		if (type == AVMEDIA_TYPE_VIDEO || type == AVMEDIA_TYPE_AUDIO) {
-
+			/*if (ic->duration <= 0) {
+				ic->duration = st->duration;
+			}*/
 		}
 
 		st->discard = AVDISCARD_ALL;
@@ -3026,6 +3034,10 @@ static int read_thread(void *arg)
 	if (infinite_buffer < 0 && is->realtime)
 		infinite_buffer = 1;
 
+
+	if (on_success != NULL)
+		on_success();
+
 	for (;;) {
 		if (is->abort_request)
 			break;
@@ -3055,8 +3067,7 @@ static int read_thread(void *arg)
 
 			ret = avformat_seek_file(is->ic, -1, seek_min, seek_target, seek_max, is->seek_flags);
 			if (ret < 0) {
-				av_log(NULL, AV_LOG_ERROR,
-					"%s: error while seeking\n", is->ic->url);
+				av_log(NULL, AV_LOG_WARNING, "%s: error while seeking\n", is->ic->url);
 			}
 			else {
 				if (is->audio_stream >= 0) {
@@ -3217,6 +3228,8 @@ static VideoState *stream_open(const char *filename, AVInputFormat *iformat)
 	init_clock(&is->vidclk, &is->videoq.serial);
 	init_clock(&is->audclk, &is->audioq.serial);
 	init_clock(&is->extclk, &is->extclk.serial);
+
+
 	is->audio_clock_serial = -1;
 	if (startup_volume < 0)
 		av_log(NULL, AV_LOG_WARNING, "-volume=%d < 0, setting to 0\n", startup_volume);
@@ -3509,7 +3522,7 @@ static void old_event_loop(VideoState *cur_stream)
 					stream_seek(cur_stream, pos, incr, 1);
 				}
 				else {
-					pos = get_master_clock2(cur_stream);
+					pos = get_master_clock(cur_stream);
 					if (isnan(pos))
 						pos = (double)cur_stream->seek_pos / AV_TIME_BASE;
 					pos += incr;
@@ -3828,6 +3841,7 @@ static int event_loop_thread(void * ssss) {
 
 	/* register all codecs, demux and protocols */
 #if CONFIG_AVDEVICE
+	av_register_all();
 	avdevice_register_all();
 #endif
 
@@ -3843,8 +3857,9 @@ static int event_loop_thread(void * ssss) {
 	//parse_options(NULL, argc, argv, options, opt_input_file);
 
 	if (!input_filename) {
-		/*show_usage();
+		show_usage();
 		av_log(NULL, AV_LOG_FATAL, "An input file must be specified\n");
+		/*
 		av_log(NULL, AV_LOG_FATAL,
 		"Use -h to get full help or, even better, run 'man %s'\n", program_name);
 		exit(1);*/
@@ -3866,7 +3881,8 @@ static int event_loop_thread(void * ssss) {
 	if (display_disable)
 		flags &= ~SDL_INIT_VIDEO;
 	if (SDL_Init(flags)) {
-		/*av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
+		av_log(NULL, AV_LOG_FATAL, "Could not initialize SDL - %s\n", SDL_GetError());
+		/*
 		av_log(NULL, AV_LOG_FATAL, "(Did you set the DISPLAY variable?)\n");
 		exit(1);*/
 		return 2;
@@ -3944,9 +3960,33 @@ EXPORT_API int WINAPI ffplay_set_af(const char * cmd)
 	afilters = av_strdup(cmd);
 }
 
+
+THREAD_LOCAL_VAR char err_buf[BUFFER_SIZE] = { 0 };
+
+void(*on_error)(const char *) = NULL;
+void log_callback(void *avcl, int level, const char *fmt,
+	va_list vl)
+{
+	if (level <= AV_LOG_ERROR) {
+		if (on_error != NULL) {
+			vsnprintf(err_buf, BUFFER_SIZE, fmt, vl);
+			on_error(err_buf);
+		}
+	}
+#ifdef _DEBUG
+	av_log_default_callback(avcl, level, fmt, vl);
+#endif
+}
+
+
+static int64_t last_pos = 0;
+
+
 /* Called from the main */
 EXPORT_API int WINAPI ffplay_start(const char * name, HWND parent)
 {
+	last_pos = 0;
+	av_log_set_callback(log_callback);
 
 	hwndParent = parent;
 	int res = 0;
@@ -3995,17 +4035,23 @@ EXPORT_API int WINAPI ffplay_resize(int w, int h)
 	return 0;
 }
 
-EXPORT_API int WINAPI ffplay_set_stop_show(int val)
+EXPORT_API void WINAPI ffplay_set_stop_show(int val)
 {
 	stop_show = val;
-	return 0;
+}
+
+EXPORT_API void WINAPI ffplay_on_error(void(*on_e)(const char * err))
+{
+	on_error = on_e;
 }
 
 
-EXPORT_API int WINAPI ffplay_on_complete(void(*on_comp)())
+EXPORT_API void WINAPI ffplay_on_success(void(*func)()) {
+	on_success = func;
+}
+EXPORT_API void WINAPI ffplay_on_complete(void(*on_comp)())
 {
 	on_complete = on_comp;
-	return 0;
 }
 
 EXPORT_API int WINAPI ffplay_get_state()
@@ -4045,20 +4091,24 @@ EXPORT_API int64_t WINAPI ffplay_get_duration()
 	if (cur_video->ic == NULL)
 		return 0;
 
+
+	if (cur_video->ic->duration < 0)
+		return 0;
+
 	int64_t time = cur_video->ic->duration / TIME_MILL;
+
+
 	/*int64_t strat_ti = cur_video->ic->start_time;
 	if (strat_ti != AV_NOPTS_VALUE) {
 		time -= strat_ti / TIME_MILL;
 	}*/
 
-	if (time < 0)
-		time = 0;
 
 	return  time;
 }
 
 
-static int64_t last_pos = 0;
+
 EXPORT_API int64_t WINAPI ffplay_get_position()
 {
 	if (cur_video == NULL)
@@ -4067,14 +4117,15 @@ EXPORT_API int64_t WINAPI ffplay_get_position()
 	if (cur_video->ic == NULL)
 		return 0;
 
+	double posFloat = get_master_clock(cur_video);
+	if (posFloat < 0)
+		return last_pos;
 
-	int64_t pos = get_master_clock2(cur_video) * TIME_MILL;
-	int64_t strat_ti = cur_video->ic->start_time;
-
-
+	int64_t pos = posFloat * TIME_MILL;
 	if (pos < 0)
 		return last_pos;
 
+	int64_t strat_ti = cur_video->ic->start_time;
 
 	if (strat_ti != AV_NOPTS_VALUE) {
 		pos -= strat_ti / TIME_MILL;
@@ -4109,7 +4160,7 @@ EXPORT_API int WINAPI ffplay_set_position(long long position)
 		position = strat_ti / TIME_MILL;
 
 
-	int64_t cur_pos = get_master_clock2(cur_video) * TIME_MILL;
+	int64_t cur_pos = get_master_clock(cur_video) * TIME_MILL;
 
 	int64_t incr = position - cur_pos;
 

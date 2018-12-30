@@ -13,5 +13,14 @@
 
 #include "FFlib.h"
 
-#define EXPORT_API __declspec(dllexport) 
+
 // TODO: reference additional headers your program requires here
+#define BUFFER_SIZE 8192
+
+#define EXPORT_API __declspec(dllexport) 
+
+#ifdef _MSC_VER
+#	define THREAD_LOCAL_VAR __declspec(thread)
+#else
+#	define THREAD_LOCAL_VAR __thread
+#endif
