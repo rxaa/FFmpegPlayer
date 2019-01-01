@@ -24,6 +24,11 @@ LRESULT CALLBACK myWndProc(HWND hWnd,
 	case WM_DESTROY:
 		PostQuitMessage(0);
 		break;
+	case WM_KEYDOWN:
+	{
+		//ffplay_stop();
+		break;
+	}
 	case WM_SIZE: //改变窗口消息
 	{
 		// extract size info

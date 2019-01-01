@@ -1301,6 +1301,8 @@ static void stream_component_close(VideoState *is, int stream_index)
 
 static void stream_close(VideoState *is)
 {
+	if (cur_video == NULL)
+		return;
 	/* XXX: use a special url_shutdown call to abort parse cleanly */
 	if (is == NULL)
 		return;
@@ -1410,7 +1412,7 @@ static int video_open(VideoState *is)
 static void video_display(VideoState *is)
 {
 
-	if (stop_show > 0)
+	if (stop_show > 0 || is_stoped > 0)
 		return;
 
 	if (!is->width)
@@ -2541,7 +2543,7 @@ static int audio_decode_frame(VideoState *is)
 	}
 #endif
 	return resampled_data_size;
-}
+	}
 
 /* prepare a new audio buffer */
 static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
@@ -3094,7 +3096,7 @@ static int read_thread(void *arg)
 			is->eof = 0;
 			if (is->paused)
 				step_to_next_frame(is);
-		}
+	}
 		if (is->queue_attachments_req) {
 			if (is->video_st && is->video_st->disposition & AV_DISPOSITION_ATTACHED_PIC) {
 				AVPacket copy = { 0 };
@@ -3175,7 +3177,7 @@ static int read_thread(void *arg)
 		else {
 			av_packet_unref(pkt);
 		}
-	}
+}
 
 	ret = 0;
 fail:
@@ -3841,7 +3843,6 @@ static int event_loop_thread(void * ssss) {
 
 	/* register all codecs, demux and protocols */
 #if CONFIG_AVDEVICE
-	av_register_all();
 	avdevice_register_all();
 #endif
 
@@ -3943,8 +3944,12 @@ static int event_loop_thread(void * ssss) {
 		do_exit(NULL);
 		return 2;
 	}
-	is_stoped = 0;
 	cur_video = is;
+
+	if (is_stoped > 0) {
+		do_exit(cur_video);
+		return;
+	}
 
 	old_event_loop(is);
 	//event_loop(is);
@@ -3985,6 +3990,7 @@ static int64_t last_pos = 0;
 /* Called from the main */
 EXPORT_API int WINAPI ffplay_start(const char * name, HWND parent)
 {
+	is_stoped = 0;
 	last_pos = 0;
 	av_log_set_callback(log_callback);
 
@@ -4003,7 +4009,7 @@ EXPORT_API int WINAPI ffplay_start(const char * name, HWND parent)
 EXPORT_API int WINAPI ffplay_stop()
 {
 	is_stoped = 1;
-	//do_exit(cur_video);
+
 }
 
 EXPORT_API int WINAPI ffplay_step_to_next_frame()

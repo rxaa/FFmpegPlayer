@@ -12,7 +12,7 @@ EXPORT_API int WINAPI ffplay_set_af(const char * cmd);
 //play file in 'hwndParent' window
 EXPORT_API int WINAPI ffplay_start(const char * name, HWND hwndParent);
 
-//stop and release all file
+//stop and release all resources
 EXPORT_API int WINAPI ffplay_stop();
 
 EXPORT_API int WINAPI ffplay_resize(int w, int h);
