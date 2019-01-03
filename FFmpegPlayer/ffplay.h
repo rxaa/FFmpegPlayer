@@ -17,6 +17,12 @@ EXPORT_API int WINAPI ffplay_stop();
 
 EXPORT_API int WINAPI ffplay_resize(int w, int h);
 
+EXPORT_API int WINAPI ffplay_get_w();
+EXPORT_API int WINAPI ffplay_get_h();
+EXPORT_API int WINAPI ffplay_get_top();
+EXPORT_API int WINAPI ffplay_get_left();
+EXPORT_API float WINAPI ffplay_get_aspect_ratio();
+
 //1.disable video render 0.enable
 EXPORT_API void WINAPI ffplay_set_stop_show(int val);
 

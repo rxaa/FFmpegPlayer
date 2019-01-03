@@ -6,7 +6,6 @@
 
 #pragma comment(lib,"ffmpeg-4.1/lib64/avcodec.lib")
 #pragma comment(lib,"ffmpeg-4.1/lib64/avformat.lib")
-#pragma comment(lib,"ffmpeg-4.1/lib64/swscale.lib")
 #pragma comment(lib,"ffmpeg-4.1/lib64/avutil.lib")
 #pragma comment(lib,"ffmpeg-4.1/lib64/swresample.lib")
 #pragma comment(lib,"ffmpeg-4.1/lib64/avdevice.lib")
@@ -21,7 +20,6 @@
 
 #pragma comment(lib,"ffmpeg-4.1/lib32/avcodec.lib")
 #pragma comment(lib,"ffmpeg-4.1/lib32/avformat.lib")
-#pragma comment(lib,"ffmpeg-4.1/lib32/swscale.lib")
 #pragma comment(lib,"ffmpeg-4.1/lib32/avutil.lib")
 #pragma comment(lib,"ffmpeg-4.1/lib32/swresample.lib")
 #pragma comment(lib,"ffmpeg-4.1/lib32/avdevice.lib")

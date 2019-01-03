@@ -887,12 +887,19 @@ static int realloc_texture(SDL_Texture **texture, Uint32 new_format, int new_wid
 	return 0;
 }
 
+
+static float _aspect_ratio = 0;
+static int _width = 0;
+static int _height = 0;
+static int _left = 0;
+static int _top = 0;
+
 static void calculate_display_rect(SDL_Rect *rect,
 	int scr_xleft, int scr_ytop, int scr_width, int scr_height,
 	int pic_width, int pic_height, AVRational pic_sar)
 {
 	float aspect_ratio;
-	int width, height, x, y;
+	int width, height, x = 0, y;
 
 	if (pic_sar.num == 0)
 		aspect_ratio = 0;
@@ -902,6 +909,10 @@ static void calculate_display_rect(SDL_Rect *rect,
 	if (aspect_ratio <= 0.0)
 		aspect_ratio = 1.0;
 	aspect_ratio *= (float)pic_width / (float)pic_height;
+
+	_aspect_ratio = aspect_ratio;
+	_width = pic_width;
+	_height = pic_height;
 
 	/* XXX: we suppose the screen has a 1.0 pixel ratio */
 	height = scr_height;
@@ -916,6 +927,12 @@ static void calculate_display_rect(SDL_Rect *rect,
 	rect->y = scr_ytop + y;
 	rect->w = FFMAX(width, 1);
 	rect->h = FFMAX(height, 1);
+
+	if (scr_width != INT_MAX) {
+		_left = rect->x;
+		_top = rect->y;
+	}
+		
 }
 
 static void get_sdl_pix_fmt_and_blendmode(int format, Uint32 *sdl_pix_fmt, SDL_BlendMode *sdl_blendmode)
@@ -1086,9 +1103,9 @@ static void video_image_display(VideoState *is)
 							   .w = sub_rect->w * xratio,
 							   .h = sub_rect->h * yratio };
 			SDL_RenderCopy(renderer, is->sub_texture, sub_rect, &target);
-		}
-#endif
 	}
+#endif
+}
 }
 
 static inline int compute_mod(int a, int b)
@@ -2540,10 +2557,10 @@ static int audio_decode_frame(VideoState *is)
 			is->audio_clock - last_clock,
 			is->audio_clock, audio_clock0);
 		last_clock = is->audio_clock;
-	}
+}
 #endif
 	return resampled_data_size;
-	}
+}
 
 /* prepare a new audio buffer */
 static void sdl_audio_callback(void *opaque, Uint8 *stream, int len)
@@ -2814,7 +2831,7 @@ out:
 	av_dict_free(&opts);
 
 	return ret;
-}
+	}
 
 static int decode_interrupt_cb(void *ctx)
 {
@@ -3096,7 +3113,7 @@ static int read_thread(void *arg)
 			is->eof = 0;
 			if (is->paused)
 				step_to_next_frame(is);
-	}
+		}
 		if (is->queue_attachments_req) {
 			if (is->video_st && is->video_st->disposition & AV_DISPOSITION_ATTACHED_PIC) {
 				AVPacket copy = { 0 };
@@ -3177,7 +3194,7 @@ static int read_thread(void *arg)
 		else {
 			av_packet_unref(pkt);
 		}
-}
+	}
 
 	ret = 0;
 fail:
@@ -3542,7 +3559,7 @@ static void old_event_loop(VideoState *cur_stream)
 				break;
 			default:
 				break;
-			}
+				}
 			break;
 			//case SDL_MOUSEWHEEL:
 			//{
@@ -3601,12 +3618,12 @@ static void old_event_loop(VideoState *cur_stream)
 			break;
 		default:
 			break;
+			}
 		}
-	}
 
 endLoop:
 	return;
-}
+	}
 /* handle an event sent by the GUI */
 static void event_loop(VideoState *cur_stream)
 {
@@ -3992,6 +4009,11 @@ EXPORT_API int WINAPI ffplay_start(const char * name, HWND parent)
 {
 	is_stoped = 0;
 	last_pos = 0;
+	_aspect_ratio = 0;
+	_width = 0;
+	_height = 0;
+	_left = 0;
+	_top = 0;
 	av_log_set_callback(log_callback);
 
 	hwndParent = parent;
@@ -4041,6 +4063,27 @@ EXPORT_API int WINAPI ffplay_resize(int w, int h)
 	return 0;
 }
 
+EXPORT_API int WINAPI ffplay_get_w()
+{
+	return _width;
+}
+EXPORT_API int WINAPI ffplay_get_h()
+{
+	return _height;
+}
+EXPORT_API int WINAPI ffplay_get_top()
+{
+	return _top;
+}
+EXPORT_API int WINAPI ffplay_get_left()
+{
+	return _left;
+}
+
+EXPORT_API float WINAPI ffplay_get_aspect_ratio()
+{
+	return _aspect_ratio;
+}
 EXPORT_API void WINAPI ffplay_set_stop_show(int val)
 {
 	stop_show = val;

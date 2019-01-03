@@ -36,6 +36,10 @@
 #define CONFIG_AVDEVICE 1
 #define CONFIG_AVFILTER 1
 
+//#define CONFIG_AVRESAMPLE 1
+#define CONFIG_SWSCALE 1
+#define CONFIG_SWRESAMPLE 1
+
 // Undefine this to get cdecl calling convention
 #define AVSC_USE_STDCALL 1
 

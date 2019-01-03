@@ -16,3 +16,8 @@ ffplay_get_position
 ffplay_set_position
 ffplay_on_error
 ffplay_on_success
+ffplay_get_w
+ffplay_get_h
+ffplay_get_top
+ffplay_get_left
+ffplay_get_aspect_ratio
