@@ -56,7 +56,7 @@
 #elif defined(_M_IX86) || defined(__i386__)
 #   define X86_32
 #else
-#   error Unsupported CPU architecture.
+//#   error Unsupported CPU architecture.
 #endif
 
 #endif //AVS_CONFIG_H

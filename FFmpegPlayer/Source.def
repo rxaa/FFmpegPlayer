@@ -21,3 +21,4 @@ ffplay_get_h
 ffplay_get_top
 ffplay_get_left
 ffplay_get_aspect_ratio
+ffprobe_file_info

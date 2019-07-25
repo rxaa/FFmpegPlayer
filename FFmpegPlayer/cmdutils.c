@@ -64,7 +64,6 @@
 #endif
 
 
-
 static int init_report(const char *env);
 
 AVDictionary *sws_dict;
@@ -957,7 +956,7 @@ static void expand_filename_template(AVBPrint *bp, const char *template,
                 break;
             switch (c) {
             case 'p':
-                av_bprintf(bp, "%s", program_name);
+                av_bprintf(bp, "%s", "ffplay");
                 break;
             case 't':
                 av_bprintf(bp, "%04d%02d%02d-%02d%02d%02d",
@@ -1934,7 +1933,7 @@ static void show_help_bsf(const char *name)
 
 int show_help(void *optctx, const char *opt, const char *arg)
 {
-    char *topic, *par;
+  /*  char *topic, *par;
     av_log_set_callback(log_callback_help);
 
     topic = av_strdup(arg ? arg : "");
@@ -1964,7 +1963,7 @@ int show_help(void *optctx, const char *opt, const char *arg)
         show_help_default(topic, par);
     }
 
-    av_freep(&topic);
+    av_freep(&topic);*/
     return 0;
 }
 

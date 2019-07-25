@@ -3,6 +3,7 @@
 
 #include "stdafx.h"
 #include "ffplay.h"
+#include "ffprobe.h"
 #include "SDL2/include/SDL.h"
 
 #ifdef _DEBUG
@@ -69,8 +70,10 @@ int main(int argc, char *argv[]) {
 		CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
 
 
-	ffplay_set_vf("vflip");
-	ffplay_start( "D:/video test/[MMD]Satisfaction.mp4", hWnd);
+	const char * res = ffprobe_file_info("D:/video test/≤‚ ‘Satisfaction.mp4");
+
+	//ffplay_set_vf("vflip");
+	ffplay_start("D:/video test/≤‚ ‘Satisfaction.mp4", hWnd);
 
 
 	//œ˚œ¢—≠ª∑

@@ -36,6 +36,9 @@
     <ClInclude Include="ffplay.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="ffprobe.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="cmdutils.c">
@@ -48,6 +51,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="stdafx.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="ffprobe.c">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
