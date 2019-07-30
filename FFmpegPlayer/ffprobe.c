@@ -29,13 +29,17 @@
 #include "libavformat/avformat.h"
 #include "libavcodec/avcodec.h"
 #include "libavutil/bprint.h"
+#include "libavutil/timecode.h"
+#include "libavutil/timestamp.h"
+#include "libavutil/pixdesc.h"
+#include "libavutil/opt.h"
 #include "cmdutils.h"
 
 const char program_name[] = "ffplay";
 
 
 THREAD_LOCAL_VAR char * json_buf = 0;
-THREAD_LOCAL_VAR size_t buf_size = 2048;
+THREAD_LOCAL_VAR size_t buf_size = 32;
 THREAD_LOCAL_VAR size_t char_n = 0;
 
 static void init_json_buf() {
@@ -63,6 +67,7 @@ static void append_str(const char * str) {
 
 		char * new_buf = malloc(buf_size);
 		memcpy(new_buf, json_buf, char_n);
+		free(json_buf);
 		json_buf = new_buf;
 	}
 
@@ -94,6 +99,11 @@ static const char unit_second_str[] = "s";
 static const char unit_hertz_str[] = "Hz";
 static const char unit_byte_str[] = "byte";
 static const char unit_bit_per_second_str[] = "bit/s";
+
+static int nb_streams;
+static uint64_t *nb_streams_packets;
+static uint64_t *nb_streams_frames;
+static int *selected_streams;
 
 static int show_value_unit = 0;
 static int use_value_prefix = 0;
@@ -156,57 +166,179 @@ static char *value_string(char *buf, int buf_size, struct unit_value uv)
 
 	return buf;
 }
-
-static void print_time(const char * key, int64_t ts, int comma) {
-
-	append_str("\"");
-	append_str(key);
-	append_str("\":\"");
-
-
-	if (ts == AV_NOPTS_VALUE) {
-		append_str("N/A");
-	}
-	else {
-		char buf[128] = { 0 };
-		double d = ts * av_q2d(AV_TIME_BASE_Q);
-		struct unit_value uv;
-		uv.val.d = d;
-		uv.unit = unit_second_str;
-		value_string(buf, sizeof(buf), uv);
-		append_str(buf);
-	}
-	append_str("\"");
-	if (comma)
-		append_str(",");
-
+static int need_comma() {
+	if (char_n > 0 && json_buf[char_n - 1] != '{' && json_buf[char_n - 1] != '[')
+		return 1;
+	return 0;
 }
+static void print_str(const char * key, const char * str) {
 
-
-static void print_int(const char * key, unsigned int val, int comma) {
-
-	append_str("\"");
-	append_str(key);
-	append_str("\":");
-	char buff[128] = { 0 };
-	snprintf(buff, sizeof(buff), "%d", val);
-	append_str(buff);
-	if (comma)
+	if (need_comma())
 		append_str(",");
-
-}
-
-static void print_str(const char * key, const char * str, int comma) {
 
 	append_str("\"");
 	append_str(key);
 	append_str("\":\"");
 	append_str(str);
 	append_str("\"");
-	if (comma)
-		append_str(",");
 
 }
+
+static void print_val(const char * key, int64_t ts, const char * val) {
+	if (need_comma())
+		append_str(",");
+
+	append_str("\"");
+	append_str(key);
+	append_str("\":");
+
+
+	if (ts < 0) {
+		append_str("0");
+	}
+	else {
+		char buf[128] = { 0 };
+		struct unit_value uv;
+		uv.val.i = ts;
+		uv.unit = val;
+		value_string(buf, sizeof(buf), uv);
+		append_str(buf);
+	}
+
+}
+
+static void print_q(const char *key, AVRational q, char sep) {
+	AVBPrint buf;
+	av_bprint_init(&buf, 0, AV_BPRINT_SIZE_AUTOMATIC);
+	av_bprintf(&buf, "%d%c%d", q.num, sep, q.den);
+	print_str(key, buf.str);
+}
+
+static void print_time(const char * key, int64_t ts) {
+
+	if (need_comma())
+		append_str(",");
+
+	append_str("\"");
+	append_str(key);
+	append_str("\":");
+
+
+	if (ts == AV_NOPTS_VALUE) {
+		append_str("0");
+	}
+	else {
+		char buf[128] = { 0 };
+		/*double d = ts * av_q2d(AV_TIME_BASE_Q);
+		struct unit_value uv;
+		uv.val.d = d;
+		uv.unit = unit_second_str;
+		value_string(buf, sizeof(buf), uv);*/
+		snprintf(buf, sizeof(buf), "%I64d", ts * 1000 / AV_TIME_BASE_Q.den);
+		append_str(buf);
+	}
+
+}
+
+
+
+static void print_uint(const char * key, uint64_t val) {
+
+	if (need_comma())
+		append_str(",");
+
+	append_str("\"");
+	append_str(key);
+	append_str("\":");
+	char buff[128] = { 0 };
+	snprintf(buff, sizeof(buff), "%I64u", val);
+	append_str(buff);
+}
+
+
+static void print_int(const char * key, int64_t val) {
+	if (need_comma())
+		append_str(",");
+
+	append_str("\"");
+	append_str(key);
+	append_str("\":");
+	char buff[128] = { 0 };
+	snprintf(buff, sizeof(buff), "%I64d", val);
+	append_str(buff);
+
+}
+static void print_ts(const char *key, int64_t ts)
+{
+	if (ts == AV_NOPTS_VALUE) {
+		print_int(key, 0);
+	}
+	else {
+		print_int(key, ts);
+	}
+}
+
+
+static void print_color_range(enum AVColorRange color_range)
+{
+	const char *val = av_color_range_name(color_range);
+	if (!val || color_range == AVCOL_RANGE_UNSPECIFIED) {
+		//print_str_opt("color_range", "unknown");
+	}
+	else {
+		print_str("color_range", val);
+	}
+}
+
+static void print_color_space(enum AVColorSpace color_space)
+{
+	const char *val = av_color_space_name(color_space);
+	if (!val || color_space == AVCOL_SPC_UNSPECIFIED) {
+		//print_str_opt("color_space", "unknown");
+	}
+	else {
+		print_str("color_space", val);
+	}
+}
+
+static void print_primaries(enum AVColorPrimaries color_primaries)
+{
+	const char *val = av_color_primaries_name(color_primaries);
+	if (!val || color_primaries == AVCOL_PRI_UNSPECIFIED) {
+		//print_str_opt("color_primaries", "unknown");
+	}
+	else {
+		print_str("color_primaries", val);
+	}
+}
+
+static void print_color_trc(enum AVColorTransferCharacteristic color_trc)
+{
+	const char *val = av_color_transfer_name(color_trc);
+	if (!val || color_trc == AVCOL_TRC_UNSPECIFIED) {
+		//print_str_opt("color_transfer", "unknown");
+	}
+	else {
+		print_str("color_transfer", val);
+	}
+}
+
+static void print_chroma_location(enum AVChromaLocation chroma_location)
+{
+	const char *val = av_chroma_location_name(chroma_location);
+	if (!val || chroma_location == AVCHROMA_LOC_UNSPECIFIED) {
+		//print_str_opt("chroma_location", "unspecified");
+	}
+	else {
+		print_str("chroma_location", val);
+	}
+}
+
+#define print_fmt(k, f, ...) do {              \
+    av_bprint_clear(&pbuf);                    \
+    av_bprintf(&pbuf, f, __VA_ARGS__);         \
+    print_str(k, pbuf.str);    \
+} while (0)
 
 typedef struct WriterContext WriterContext;
 
@@ -443,27 +575,273 @@ static void close_input_file(InputFile *ifile)
 }
 
 
+static  int show_tags(AVDictionary *tags) {
+	AVDictionaryEntry *tag = NULL;
+	int ret = 0;
+
+	if (!tags)
+		return 0;
+
+	append_str(",\"tags\":{");
+
+	while ((tag = av_dict_get(tags, "", tag, AV_DICT_IGNORE_SUFFIX))) {
+		print_str(tag->key, tag->value);
+	}
+
+	append_str("}");
+	return ret;
+}
 
 
 static int show_format(InputFile *ifile)
 {
+	append_str("  \"format\":{");
 	AVFormatContext *fmt_ctx = ifile->fmt_ctx;
 	char val_str[128];
 	int64_t size = fmt_ctx->pb ? avio_size(fmt_ctx->pb) : -1;
 	int ret = 0;
 
-	print_str("filename", fmt_ctx->url, 1);
-	print_int("nb_streams", fmt_ctx->nb_streams, 1);
-	print_int("nb_programs", fmt_ctx->nb_programs, 1);
-	print_str("format_name", fmt_ctx->iformat->name, 1);
-	if (fmt_ctx->iformat->long_name) print_str("format_long_name", fmt_ctx->iformat->long_name, 1);
-	else                             print_str("format_long_name", "unknown", 1);
+	print_str("filename", fmt_ctx->url);
+	print_uint("nb_streams", fmt_ctx->nb_streams);
+	print_uint("nb_programs", fmt_ctx->nb_programs);
+	print_str("format_name", fmt_ctx->iformat->name);
+	if (fmt_ctx->iformat->long_name) print_str("format_long_name", fmt_ctx->iformat->long_name);
 
-	print_time("start_time", fmt_ctx->start_time, 1);
-	print_time("duration", fmt_ctx->duration, 1);
+	print_time("start_time", fmt_ctx->start_time);
+	print_time("duration", fmt_ctx->duration);
+	if (size < 0)
+		print_int("size", 0);
+	else
+		print_int("size", size);
+
+	if (fmt_ctx->bit_rate < 0)
+		print_int("bit_rate", 0);
+	else
+		print_int("bit_rate", fmt_ctx->bit_rate);
+
+	print_int("probe_score", fmt_ctx->probe_score);
+	ret = show_tags(fmt_ctx->metadata);
+
+
+
+	append_str("  },\r\n");
+
+	return ret;
+
 
 }
 
+static int show_stream(AVFormatContext *fmt_ctx, int stream_idx, InputStream *ist, int in_program)
+{
+	if (char_n > 0 && json_buf[char_n - 1] == '}')
+		append_str(",");
+	append_str("{");
+
+
+
+	AVStream *stream = ist->st;
+	AVCodecParameters *par;
+	AVCodecContext *dec_ctx;
+	char val_str[128];
+	const char *s;
+	AVRational sar, dar;
+	AVBPrint pbuf;
+	const AVCodecDescriptor *cd;
+	int ret = 0;
+	const char *profile = NULL;
+
+	av_bprint_init(&pbuf, 1, AV_BPRINT_SIZE_UNLIMITED);
+
+	print_int("index", stream->index);
+
+	par = stream->codecpar;
+	dec_ctx = ist->dec_ctx;
+	if (cd = avcodec_descriptor_get(par->codec_id)) {
+		print_str("codec_name", cd->name);
+		print_str("codec_long_name",
+			cd->long_name ? cd->long_name : "unknown");
+	}
+
+	if ((profile = avcodec_profile_name(par->codec_id, par->profile)))
+		print_str("profile", profile);
+	else {
+		if (par->profile != FF_PROFILE_UNKNOWN) {
+			char profile_num[12];
+			snprintf(profile_num, sizeof(profile_num), "%d", par->profile);
+			print_str("profile", profile_num);
+		}
+
+	}
+
+	s = av_get_media_type_string(par->codec_type);
+	if (s) print_str("codec_type", s);
+
+	if (dec_ctx)
+		print_q("codec_time_base", dec_ctx->time_base, '/');
+	print_str("codec_tag_string", av_fourcc2str(par->codec_tag));
+	print_fmt("codec_tag", "0x%04"PRIx32, par->codec_tag);
+
+
+	switch (par->codec_type) {
+	case AVMEDIA_TYPE_VIDEO:
+		print_int("width", par->width);
+		print_int("height", par->height);
+		print_int("coded_width", dec_ctx->coded_width);
+		print_int("coded_height", dec_ctx->coded_height);
+
+		print_int("has_b_frames", par->video_delay);
+		sar = av_guess_sample_aspect_ratio(fmt_ctx, stream, NULL);
+		if (sar.num) {
+			print_q("sample_aspect_ratio", sar, ':');
+			av_reduce(&dar.num, &dar.den,
+				par->width  * sar.num,
+				par->height * sar.den,
+				1024 * 1024);
+			print_q("display_aspect_ratio", dar, ':');
+		}
+		else {
+			//print_str_opt("sample_aspect_ratio", "N/A");
+			//print_str_opt("display_aspect_ratio", "N/A");
+		}
+		s = av_get_pix_fmt_name(par->format);
+		if (s) print_str("pix_fmt", s);
+		print_int("level", par->level);
+
+		print_color_range(par->color_range);
+		print_color_space(par->color_space);
+		print_color_trc(par->color_trc);
+		print_primaries(par->color_primaries);
+		print_chroma_location(par->chroma_location);
+
+		if (par->field_order == AV_FIELD_PROGRESSIVE)
+			print_str("field_order", "progressive");
+		else if (par->field_order == AV_FIELD_TT)
+			print_str("field_order", "tt");
+		else if (par->field_order == AV_FIELD_BB)
+			print_str("field_order", "bb");
+		else if (par->field_order == AV_FIELD_TB)
+			print_str("field_order", "tb");
+		else if (par->field_order == AV_FIELD_BT)
+			print_str("field_order", "bt");
+		/*else
+			print_str_opt("field_order", "unknown");*/
+
+		if (dec_ctx && dec_ctx->timecode_frame_start >= 0) {
+			char tcbuf[AV_TIMECODE_STR_SIZE];
+			av_timecode_make_mpeg_tc_string(tcbuf, dec_ctx->timecode_frame_start);
+			print_str("timecode", tcbuf);
+		}
+		else {
+			//print_str_opt("timecode", "N/A");
+		}
+		print_int("refs", dec_ctx->refs);
+		break;
+
+	case AVMEDIA_TYPE_AUDIO:
+		s = av_get_sample_fmt_name(par->format);
+		if (s) print_str("sample_fmt", s);
+		print_val("sample_rate", par->sample_rate, unit_hertz_str);
+		print_int("channels", par->channels);
+
+		if (par->channel_layout) {
+			av_bprint_clear(&pbuf);
+			av_bprint_channel_layout(&pbuf, par->channels, par->channel_layout);
+			print_str("v", pbuf.str);
+		}
+		else {
+			//print_str_opt("channel_layout", "unknown");
+		}
+
+		print_int("bits_per_sample", av_get_bits_per_sample(par->codec_id));
+		break;
+
+	case AVMEDIA_TYPE_SUBTITLE:
+		if (par->width)
+			print_int("width", par->width);
+		/*else
+			print_str_opt("width", "N/A");*/
+		if (par->height)
+			print_int("height", par->height);
+		/*else
+			print_str_opt("height", "N/A");*/
+		break;
+	}
+
+	if (dec_ctx && dec_ctx->codec && dec_ctx->codec->priv_class && show_private_data) {
+		const AVOption *opt = NULL;
+		while (opt = av_opt_next(dec_ctx->priv_data, opt)) {
+			uint8_t *str;
+			if (opt->flags) continue;
+			if (av_opt_get(dec_ctx->priv_data, opt->name, 0, &str) >= 0) {
+				print_str(opt->name, str);
+				av_free(str);
+			}
+		}
+	}
+
+	if (fmt_ctx->iformat->flags & AVFMT_SHOW_IDS) print_fmt("id", "0x%x", stream->id);
+
+	print_q("r_frame_rate", stream->r_frame_rate, '/');
+	print_q("avg_frame_rate", stream->avg_frame_rate, '/');
+	print_q("time_base", stream->time_base, '/');
+	print_ts("start_pts", stream->start_time);
+	print_time("start_time", stream->start_time, &stream->time_base);
+	print_ts("duration_ts", stream->duration);
+	print_time("duration", stream->duration, &stream->time_base);
+	if (par->bit_rate > 0)     print_val("bit_rate", par->bit_rate, unit_bit_per_second_str);
+
+	if (stream->codec->rc_max_rate > 0) print_val("max_bit_rate", stream->codec->rc_max_rate, unit_bit_per_second_str);
+
+
+	if (dec_ctx && dec_ctx->bits_per_raw_sample > 0) print_fmt("bits_per_raw_sample", "%d", dec_ctx->bits_per_raw_sample);
+	//else                                             print_str_opt("bits_per_raw_sample", "N/A");
+	if (stream->nb_frames) print_fmt("nb_frames", "%"PRId64, stream->nb_frames);
+	//else                   print_str_opt("nb_frames", "N/A");
+
+
+	/* Print disposition information */
+#define PRINT_DISPOSITION(flagname, name) do {                                \
+        print_int(name, !!(stream->disposition & AV_DISPOSITION_##flagname)); \
+    } while (0)
+
+	append_str(",  \"disposition\":{");
+	PRINT_DISPOSITION(DEFAULT, "default");
+	PRINT_DISPOSITION(DUB, "dub");
+	PRINT_DISPOSITION(ORIGINAL, "original");
+	PRINT_DISPOSITION(COMMENT, "comment");
+	PRINT_DISPOSITION(LYRICS, "lyrics");
+	PRINT_DISPOSITION(KARAOKE, "karaoke");
+	PRINT_DISPOSITION(FORCED, "forced");
+	PRINT_DISPOSITION(HEARING_IMPAIRED, "hearing_impaired");
+	PRINT_DISPOSITION(VISUAL_IMPAIRED, "visual_impaired");
+	PRINT_DISPOSITION(CLEAN_EFFECTS, "clean_effects");
+	PRINT_DISPOSITION(ATTACHED_PIC, "attached_pic");
+	PRINT_DISPOSITION(TIMED_THUMBNAILS, "timed_thumbnails");
+	append_str("}");
+
+	ret = show_tags(stream->metadata);
+
+
+	append_str("}");
+}
+
+static int show_streams(InputFile *ifile)
+{
+
+	append_str("  \"streams\":[");
+	AVFormatContext *fmt_ctx = ifile->fmt_ctx;
+	int i, ret = 0;
+
+	for (i = 0; i < ifile->nb_streams; i++)
+		if (selected_streams[i]) {
+			ret = show_stream(fmt_ctx, i, &ifile->streams[i], 0);
+			if (ret < 0)
+				break;
+		}
+	append_str("  ]\r\n");
+
+	return ret;
+}
 
 
 EXPORT_API char * WINAPI ffprobe_file_info(const char * filename)
@@ -472,7 +850,6 @@ EXPORT_API char * WINAPI ffprobe_file_info(const char * filename)
 	int nb_streams = 0;
 	uint64_t *nb_streams_packets = 0;
 	uint64_t *nb_streams_frames = 0;
-	int *selected_streams = 0;
 	char *stream_specifier = 0;
 	init_json_buf();
 
@@ -509,8 +886,7 @@ EXPORT_API char * WINAPI ffprobe_file_info(const char * filename)
 	AVFormatContext *fmt_ctx = ifile.fmt_ctx;
 
 
-	/*ret = show_streams(wctx, &ifile);
-	CHECK_END;
+	/*
 
 	ret = show_chapters(wctx, &ifile);
 	CHECK_END;*/
@@ -518,6 +894,8 @@ EXPORT_API char * WINAPI ffprobe_file_info(const char * filename)
 	ret = show_format(&ifile);
 	CHECK_END;
 
+	ret = show_streams(&ifile);
+	CHECK_END;
 
 
 end:
