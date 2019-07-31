@@ -70,7 +70,9 @@ int main(int argc, char *argv[]) {
 		CW_USEDEFAULT, NULL, NULL, hInstance, NULL);
 
 
-	const char * res = ffprobe_file_info("D:/video test/≤‚ ‘Satisfaction.mp4");
+	const char * res = ffprobe_file_info("D:/video test/A Silent Voice_dream orphans bd it.ttf");
+
+	 res = ffprobe_file_info("D:/video test/[MMD]Satisfaction_4_2.mp4");
 
 	//ffplay_set_vf("vflip");
 	ffplay_start("D:/video test/≤‚ ‘Satisfaction.mp4", hWnd);

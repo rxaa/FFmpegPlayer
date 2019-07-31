@@ -39,7 +39,7 @@ const char program_name[] = "ffplay";
 
 
 THREAD_LOCAL_VAR char * json_buf = 0;
-THREAD_LOCAL_VAR size_t buf_size = 32;
+THREAD_LOCAL_VAR size_t buf_size = 2048;
 THREAD_LOCAL_VAR size_t char_n = 0;
 
 static void init_json_buf() {
@@ -50,29 +50,61 @@ static void init_json_buf() {
 	json_buf[0] = 0;
 }
 
-static void append_str(const char * str) {
-	if (str == 0)
-		return;
+static void append_char(const char str) {
 
 	if (json_buf == 0) {
 		json_buf = malloc(buf_size);
 	}
 
-	int len = strlen(str);
-
-	if (char_n + len + 1 >= buf_size) {
-		while (char_n + len + 1 >= buf_size) {
-			buf_size *= 2;
-		}
-
+	if (char_n + 2 >= buf_size) {
+		buf_size *= 2;
 		char * new_buf = malloc(buf_size);
 		memcpy(new_buf, json_buf, char_n);
 		free(json_buf);
 		json_buf = new_buf;
 	}
+	json_buf[char_n] = str;
+	char_n++;
+	json_buf[char_n] = 0;
 
-	memcpy(json_buf + char_n, str, len + 1);
-	char_n += len;
+}
+
+static void append_str(const char * str, int trans) {
+	if (str == 0)
+		return;
+
+	char s = 0;
+	for (int i = 0; s = str[i]; i++) {
+		if (trans) {
+			if (s == '"' || s == '\\') {
+				append_char('\\');
+				append_char(s);
+				continue;
+			}
+
+			if (s == '\r') {
+				append_char('\\');
+				append_char('r');
+				continue;
+			}
+
+			if (s == '\n') {
+				append_char('\\');
+				append_char('n');
+				continue;
+			}
+
+			if (s == '\t') {
+				append_char('\\');
+				append_char('t');
+				continue;
+			}
+		}
+
+
+		append_char(s);
+
+	}
 }
 
 
@@ -174,27 +206,27 @@ static int need_comma() {
 static void print_str(const char * key, const char * str) {
 
 	if (need_comma())
-		append_str(",");
+		append_char(',');
 
-	append_str("\"");
-	append_str(key);
-	append_str("\":\"");
-	append_str(str);
-	append_str("\"");
+	append_char('"');
+	append_str(key, 0);
+	append_str("\":\"", 0);
+	append_str(str, 1);
+	append_char('"');
 
 }
 
 static void print_val(const char * key, int64_t ts, const char * val) {
 	if (need_comma())
-		append_str(",");
+		append_char(',');
 
-	append_str("\"");
-	append_str(key);
-	append_str("\":");
+	append_char('"');
+	append_str(key, 0);
+	append_str("\":", 0);
 
 
 	if (ts < 0) {
-		append_str("0");
+		append_char('0');
 	}
 	else {
 		char buf[128] = { 0 };
@@ -202,7 +234,7 @@ static void print_val(const char * key, int64_t ts, const char * val) {
 		uv.val.i = ts;
 		uv.unit = val;
 		value_string(buf, sizeof(buf), uv);
-		append_str(buf);
+		append_str(buf, 1);
 	}
 
 }
@@ -214,18 +246,18 @@ static void print_q(const char *key, AVRational q, char sep) {
 	print_str(key, buf.str);
 }
 
-static void print_time(const char * key, int64_t ts) {
+static void print_time(const char * key, int64_t ts, const AVRational * time_base) {
 
 	if (need_comma())
-		append_str(",");
+		append_char(',');
 
-	append_str("\"");
-	append_str(key);
-	append_str("\":");
+	append_char('"');
+	append_str(key, 0);
+	append_str("\":", 0);
 
 
 	if (ts == AV_NOPTS_VALUE) {
-		append_str("0");
+		append_char('0');
 	}
 	else {
 		char buf[128] = { 0 };
@@ -234,8 +266,8 @@ static void print_time(const char * key, int64_t ts) {
 		uv.val.d = d;
 		uv.unit = unit_second_str;
 		value_string(buf, sizeof(buf), uv);*/
-		snprintf(buf, sizeof(buf), "%I64d", ts * 1000 / AV_TIME_BASE_Q.den);
-		append_str(buf);
+		snprintf(buf, sizeof(buf), "%I64d", ts * 1000 / (*time_base).den);
+		append_str(buf, 0);
 	}
 
 }
@@ -245,27 +277,27 @@ static void print_time(const char * key, int64_t ts) {
 static void print_uint(const char * key, uint64_t val) {
 
 	if (need_comma())
-		append_str(",");
+		append_char(',');
 
-	append_str("\"");
-	append_str(key);
-	append_str("\":");
+	append_char('"');
+	append_str(key, 0);
+	append_str("\":", 0);
 	char buff[128] = { 0 };
 	snprintf(buff, sizeof(buff), "%I64u", val);
-	append_str(buff);
+	append_str(buff, 0);
 }
 
 
 static void print_int(const char * key, int64_t val) {
 	if (need_comma())
-		append_str(",");
+		append_char(',');
 
-	append_str("\"");
-	append_str(key);
-	append_str("\":");
+	append_char('"');
+	append_str(key, 0);
+	append_str("\":", 0);
 	char buff[128] = { 0 };
 	snprintf(buff, sizeof(buff), "%I64d", val);
-	append_str(buff);
+	append_str(buff, 0);
 
 }
 static void print_ts(const char *key, int64_t ts)
@@ -396,18 +428,18 @@ typedef struct InputStream {
 
 void print_error_tojson(const char *filename, int err)
 {
-	char errbuf[128];
+	char errbuf[256];
 	const char *errbuf_ptr = errbuf;
 
 	if (av_strerror(err, errbuf, sizeof(errbuf)) < 0)
 		errbuf_ptr = strerror(AVUNERROR(err));
-	append_str("\"");
-	append_str("error");
-	append_str("\":\"");
-	append_str(filename);
-	append_str(": ");
-	append_str(errbuf_ptr);
-	append_str("\"");
+	append_char('"');
+	append_str("error", 0);
+	append_str("\":\"", 0);
+	append_str(filename, 1);
+	append_str(": ", 0);
+	append_str(errbuf_ptr, 1);
+	append_str("\"", 0);
 }
 
 typedef struct InputFile {
@@ -425,7 +457,7 @@ static int open_input_file(InputFile *ifile, const char *filename)
 	int err, i;
 	AVFormatContext *fmt_ctx = NULL;
 	AVDictionaryEntry *t;
-	int scan_all_pmts_set = 0;
+	int scan_all_pmts_set = 1;
 
 	fmt_ctx = avformat_alloc_context();
 	if (!fmt_ctx) {
@@ -443,6 +475,7 @@ static int open_input_file(InputFile *ifile, const char *filename)
 		return err;
 	}
 	ifile->fmt_ctx = fmt_ctx;
+
 	if (scan_all_pmts_set)
 		av_dict_set(&format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE);
 	if ((t = av_dict_get(format_opts, "", NULL, AV_DICT_IGNORE_SUFFIX))) {
@@ -582,20 +615,20 @@ static  int show_tags(AVDictionary *tags) {
 	if (!tags)
 		return 0;
 
-	append_str(",\"tags\":{");
+	append_str(",\"tags\":{", 0);
 
 	while ((tag = av_dict_get(tags, "", tag, AV_DICT_IGNORE_SUFFIX))) {
 		print_str(tag->key, tag->value);
 	}
 
-	append_str("}");
+	append_str("}", 0);
 	return ret;
 }
 
 
 static int show_format(InputFile *ifile)
 {
-	append_str("  \"format\":{");
+	append_str("  \"format\":{", 0);
 	AVFormatContext *fmt_ctx = ifile->fmt_ctx;
 	char val_str[128];
 	int64_t size = fmt_ctx->pb ? avio_size(fmt_ctx->pb) : -1;
@@ -607,8 +640,8 @@ static int show_format(InputFile *ifile)
 	print_str("format_name", fmt_ctx->iformat->name);
 	if (fmt_ctx->iformat->long_name) print_str("format_long_name", fmt_ctx->iformat->long_name);
 
-	print_time("start_time", fmt_ctx->start_time);
-	print_time("duration", fmt_ctx->duration);
+	print_time("start_time", fmt_ctx->start_time, &AV_TIME_BASE_Q);
+	print_time("duration", fmt_ctx->duration, &AV_TIME_BASE_Q);
 	if (size < 0)
 		print_int("size", 0);
 	else
@@ -624,7 +657,7 @@ static int show_format(InputFile *ifile)
 
 
 
-	append_str("  },\r\n");
+	append_str("  },\r\n", 0);
 
 	return ret;
 
@@ -634,8 +667,8 @@ static int show_format(InputFile *ifile)
 static int show_stream(AVFormatContext *fmt_ctx, int stream_idx, InputStream *ist, int in_program)
 {
 	if (char_n > 0 && json_buf[char_n - 1] == '}')
-		append_str(",");
-	append_str("{");
+		append_str(",", 0);
+	append_str("{", 0);
 
 
 
@@ -804,7 +837,7 @@ static int show_stream(AVFormatContext *fmt_ctx, int stream_idx, InputStream *is
         print_int(name, !!(stream->disposition & AV_DISPOSITION_##flagname)); \
     } while (0)
 
-	append_str(",  \"disposition\":{");
+	append_str(",  \"disposition\":{", 0);
 	PRINT_DISPOSITION(DEFAULT, "default");
 	PRINT_DISPOSITION(DUB, "dub");
 	PRINT_DISPOSITION(ORIGINAL, "original");
@@ -817,18 +850,22 @@ static int show_stream(AVFormatContext *fmt_ctx, int stream_idx, InputStream *is
 	PRINT_DISPOSITION(CLEAN_EFFECTS, "clean_effects");
 	PRINT_DISPOSITION(ATTACHED_PIC, "attached_pic");
 	PRINT_DISPOSITION(TIMED_THUMBNAILS, "timed_thumbnails");
-	append_str("}");
+	append_str("}", 0);
 
 	ret = show_tags(stream->metadata);
 
 
-	append_str("}");
+	append_str("}", 0);
+
+	av_bprint_finalize(&pbuf, NULL);
+
+	return ret;
 }
 
 static int show_streams(InputFile *ifile)
 {
 
-	append_str("  \"streams\":[");
+	append_str("  \"streams\":[", 0);
 	AVFormatContext *fmt_ctx = ifile->fmt_ctx;
 	int i, ret = 0;
 
@@ -838,7 +875,7 @@ static int show_streams(InputFile *ifile)
 			if (ret < 0)
 				break;
 		}
-	append_str("  ]\r\n");
+	append_str("  ]\r\n", 0);
 
 	return ret;
 }
@@ -853,7 +890,7 @@ EXPORT_API char * WINAPI ffprobe_file_info(const char * filename)
 	char *stream_specifier = 0;
 	init_json_buf();
 
-	append_str("{");
+	append_str("{", 0);
 
 
 	int ret = open_input_file(&ifile, filename);
@@ -904,6 +941,6 @@ end:
 	av_freep(&nb_streams_frames);
 	av_freep(&nb_streams_packets);
 	av_freep(&selected_streams);
-	append_str("}");
+	append_str("}", 0);
 	return json_buf;
 }
