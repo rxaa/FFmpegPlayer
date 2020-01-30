@@ -1,27 +1,27 @@
 /*
- * Copyright (c) 2007-2010 Stefano Sabatini
- *
- * This file is part of FFmpeg.
- *
- * FFmpeg is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License as published by the Free Software Foundation; either
- * version 2.1 of the License, or (at your option) any later version.
- *
- * FFmpeg is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
- * Lesser General Public License for more details.
- *
- * You should have received a copy of the GNU Lesser General Public
- * License along with FFmpeg; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
- */
+* Copyright (c) 2007-2010 Stefano Sabatini
+*
+* This file is part of FFmpeg.
+*
+* FFmpeg is free software; you can redistribute it and/or
+* modify it under the terms of the GNU Lesser General Public
+* License as published by the Free Software Foundation; either
+* version 2.1 of the License, or (at your option) any later version.
+*
+* FFmpeg is distributed in the hope that it will be useful,
+* but WITHOUT ANY WARRANTY; without even the implied warranty of
+* MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+* Lesser General Public License for more details.
+*
+* You should have received a copy of the GNU Lesser General Public
+* License along with FFmpeg; if not, write to the Free Software
+* Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA
+*/
 
- /**
-  * @file
-  * simple media prober based on the FFmpeg libraries
-  */
+/**
+* @file
+* simple media prober based on the FFmpeg libraries
+*/
 
 #include "stdafx.h"
 #include "ffprobe.h"
@@ -34,6 +34,7 @@
 #include "libavutil/pixdesc.h"
 #include "libavutil/opt.h"
 #include "cmdutils.h"
+#include <inttypes.h>
 
 const char program_name[] = "ffplay";
 
@@ -266,7 +267,7 @@ static void print_time(const char * key, int64_t ts, const AVRational * time_bas
 		uv.val.d = d;
 		uv.unit = unit_second_str;
 		value_string(buf, sizeof(buf), uv);*/
-		snprintf(buf, sizeof(buf), "%I64d", ts * 1000 / (*time_base).den);
+		snprintf(buf, sizeof(buf),"%" PRId64, ts * 1000 / (*time_base).den);
 		append_str(buf, 0);
 	}
 
@@ -283,7 +284,7 @@ static void print_uint(const char * key, uint64_t val) {
 	append_str(key, 0);
 	append_str("\":", 0);
 	char buff[128] = { 0 };
-	snprintf(buff, sizeof(buff), "%I64u", val);
+	snprintf(buff, sizeof(buff),"%" PRIu64, val);
 	append_str(buff, 0);
 }
 
@@ -296,7 +297,7 @@ static void print_int(const char * key, int64_t val) {
 	append_str(key, 0);
 	append_str("\":", 0);
 	char buff[128] = { 0 };
-	snprintf(buff, sizeof(buff), "%I64d", val);
+	snprintf(buff, sizeof(buff),"%" PRId64, val);
 	append_str(buff, 0);
 
 }
@@ -428,7 +429,7 @@ typedef struct InputStream {
 
 void print_error_tojson(const char *filename, int err)
 {
-	char errbuf[256];
+	char errbuf[2048];
 	const char *errbuf_ptr = errbuf;
 
 	if (av_strerror(err, errbuf, sizeof(errbuf)) < 0)
@@ -480,7 +481,7 @@ static int open_input_file(InputFile *ifile, const char *filename)
 		av_dict_set(&format_opts, "scan_all_pmts", NULL, AV_DICT_MATCH_CASE);
 	if ((t = av_dict_get(format_opts, "", NULL, AV_DICT_IGNORE_SUFFIX))) {
 		av_log(NULL, AV_LOG_ERROR, "Option %s not found.\n", t->key);
-		print_str("error", "Option not found", 0);
+		print_str("error", "Option not found");
 		return AVERROR_OPTION_NOT_FOUND;
 	}
 
@@ -505,7 +506,7 @@ static int open_input_file(InputFile *ifile, const char *filename)
 	ifile->streams = av_mallocz_array(fmt_ctx->nb_streams,
 		sizeof(*ifile->streams));
 	if (!ifile->streams) {
-		print_str("error", "no streams", 0);
+		print_str("error", "no streams");
 		return -1;
 	}
 	ifile->nb_streams = fmt_ctx->nb_streams;
@@ -539,13 +540,13 @@ static int open_input_file(InputFile *ifile, const char *filename)
 			ist->dec_ctx = avcodec_alloc_context3(codec);
 			if (!ist->dec_ctx)
 			{
-				print_str("error", "avcodec_alloc_context failed", 0);
+				print_str("error", "avcodec_alloc_context failed");
 				return -1;
 			}
 
 			err = avcodec_parameters_to_context(ist->dec_ctx, stream->codecpar);
 			if (err < 0) {
-				print_str("error", "avcodec_parameters_to_context failed", 0);
+				print_str("error", "avcodec_parameters_to_context failed");
 				return -1;
 			}
 
@@ -567,14 +568,14 @@ static int open_input_file(InputFile *ifile, const char *filename)
 				av_log(NULL, AV_LOG_WARNING, "Could not open codec for input stream %d\n",
 					stream->index);
 
-				print_str("error", "Could not open codec for input stream", 0);
+				print_str("error", "Could not open codec for input stream");
 				return -1;
 			}
 
 			if ((t = av_dict_get(opts, "", NULL, AV_DICT_IGNORE_SUFFIX))) {
 				av_log(NULL, AV_LOG_ERROR, "Option %s for input stream %d not found\n",
 					t->key, stream->index);
-				print_str("error", "Option not found", 0);
+				print_str("error", "Option not found");
 				return AVERROR_OPTION_NOT_FOUND;
 			}
 		}
@@ -630,7 +631,6 @@ static int show_format(InputFile *ifile)
 {
 	append_str("  \"format\":{", 0);
 	AVFormatContext *fmt_ctx = ifile->fmt_ctx;
-	char val_str[128];
 	int64_t size = fmt_ctx->pb ? avio_size(fmt_ctx->pb) : -1;
 	int ret = 0;
 
@@ -675,7 +675,6 @@ static int show_stream(AVFormatContext *fmt_ctx, int stream_idx, InputStream *is
 	AVStream *stream = ist->st;
 	AVCodecParameters *par;
 	AVCodecContext *dec_ctx;
-	char val_str[128];
 	const char *s;
 	AVRational sar, dar;
 	AVBPrint pbuf;
@@ -757,7 +756,7 @@ static int show_stream(AVFormatContext *fmt_ctx, int stream_idx, InputStream *is
 		else if (par->field_order == AV_FIELD_BT)
 			print_str("field_order", "bt");
 		/*else
-			print_str_opt("field_order", "unknown");*/
+		print_str_opt("field_order", "unknown");*/
 
 		if (dec_ctx && dec_ctx->timecode_frame_start >= 0) {
 			char tcbuf[AV_TIMECODE_STR_SIZE];
@@ -792,11 +791,11 @@ static int show_stream(AVFormatContext *fmt_ctx, int stream_idx, InputStream *is
 		if (par->width)
 			print_int("width", par->width);
 		/*else
-			print_str_opt("width", "N/A");*/
+		print_str_opt("width", "N/A");*/
 		if (par->height)
 			print_int("height", par->height);
 		/*else
-			print_str_opt("height", "N/A");*/
+		print_str_opt("height", "N/A");*/
 		break;
 	}
 
